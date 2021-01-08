@@ -21,6 +21,17 @@ type MultiWriter struct {
 	writers []io.Writer
 }
 
+func removeEmpty(slice *[]string) {
+	i := 0
+	for _, v := range *slice {
+		if v != "" {
+			(*slice)[i] = v
+			i++
+		}
+	}
+	*slice = (*slice)[:i]
+}
+
 func (w MultiWriter) Write(p []byte) (int, error) {
 	maxWrite := 0
 	var e error = nil
@@ -64,7 +75,9 @@ func (p Runner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					defer mutex.Unlock()
 					log.Printf("EXEC: %s %s", cmd, args)
 					w.WriteHeader(200)
-					command := exec.Command(cmd, strings.Split(string(args), " ")...)
+					argsForCommand := strings.Split(string(args), " ")
+					removeEmpty(&argsForCommand)
+					command := exec.Command(cmd, argsForCommand...)
 					multiWriter := MultiWriter{[]io.Writer{log.Writer(), w}}
 					command.Stdout = multiWriter
 					command.Stderr = multiWriter
@@ -84,8 +97,9 @@ func (p Runner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	addrAndPort := flag.String("b", "127.0.0.1:1888", "bind address and port")
+	config := flag.String("c", ".config", "config file location")
 	flag.Parse()
-	file, err := ioutil.ReadFile(".config")
+	file, err := ioutil.ReadFile(*config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -102,6 +116,6 @@ func main() {
 		}
 	}
 	log.Printf("Listen: %s\n", *addrAndPort)
-	log.Printf("Load: %v", m)
+	log.Printf("Load %s : %v ", *config, m)
 	http.ListenAndServe(*addrAndPort, Runner{Map: m})
 }
