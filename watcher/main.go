@@ -35,7 +35,11 @@ func main() {
 	}
 	if receivedCount == 0 {
 		log.Println("It is Dead")
-		exec.Command("shutdown", "now").Start()
+		//crontab should use absolute path
+		err := exec.Command("/usr/sbin/shutdown", "now").Start()
+		if err != nil {
+			log.Fatal(err)
+		}
 	} else {
 		log.Println("It is Alive")
 	}
