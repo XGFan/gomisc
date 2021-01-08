@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,31 +53,27 @@ func (p Runner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(500)
 				_, _ = w.Write([]byte("Read Body Fail\n"))
 			} else {
-				tick := make(chan bool, 1)
-				finished := false
+				mutex := sync.Mutex{}
+				mutex.Lock()
 				go func() {
-					time.Sleep(8 * time.Second)
-					if !finished {
-						_, _ = w.Write([]byte("\nTo Be Continued\n"))
-					}
-					tick <- true
+					defer mutex.Unlock()
+					time.Sleep(5 * time.Second)
+					_, _ = w.Write([]byte("\nTo Be Continued\n"))
 				}()
 				go func() {
+					defer mutex.Unlock()
 					log.Printf("EXEC: %s %s", cmd, args)
 					w.WriteHeader(200)
 					command := exec.Command(cmd, strings.Split(string(args), " ")...)
 					multiWriter := MultiWriter{[]io.Writer{log.Writer(), w}}
 					command.Stdout = multiWriter
 					command.Stderr = multiWriter
-					//command.Stdin = strings.NewReader("\n")
 					runError := command.Run()
 					if runError != nil {
 						log.Println(runError)
 					}
-					finished = true
-					tick <- true
 				}()
-				<-tick
+				mutex.Lock()
 			}
 		}
 	} else {
@@ -85,6 +83,8 @@ func (p Runner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	addrAndPort := flag.String("b", "127.0.0.1:1888", "bind address and port")
+	flag.Parse()
 	file, err := ioutil.ReadFile(".config")
 	if err != nil {
 		log.Fatal(err)
@@ -101,6 +101,7 @@ func main() {
 			}
 		}
 	}
-	log.Printf("load: %v", m)
-	http.ListenAndServe("127.0.0.1:1888", Runner{Map: m})
+	log.Printf("Listen: %s\n", *addrAndPort)
+	log.Printf("Load: %v", m)
+	http.ListenAndServe(*addrAndPort, Runner{Map: m})
 }
